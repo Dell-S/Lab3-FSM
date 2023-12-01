@@ -1,36 +1,33 @@
 #include "verilated.h"
 #include "verilated_vcd_c.h"
-#include "Vclktick.h"
-
-#include "vbuddy.cpp"     // include vbuddy code
-#define MAX_SIM_CYC 100000
+#include "Vlfsr.h"
+#include "vbuddy.cpp"
+#define MAX_SIM_CYC 1000000
 
 int main(int argc, char **argv, char **env) {
   int simcyc;     // simulation clock count
   int tick;       // each clk cycle has two ticks for two edges
-  int lights = 0; // state to toggle LED lights
 
   Verilated::commandArgs(argc, argv);
   // init top verilog instance
-  Vclktick * top = new Vclktick;
+  Vlfsr* top = new Vlfsr;
   // init trace dump
   Verilated::traceEverOn(true);
   VerilatedVcdC* tfp = new VerilatedVcdC;
   top->trace (tfp, 99);
-  tfp->open ("clktick.vcd");
+  tfp->open ("lfsr.vcd");
  
   // init Vbuddy
   if (vbdOpen()!=1) return(-1);
-  vbdHeader("L3T3:Clktick");
+  vbdHeader("L3T1");
   vbdSetMode(1);        // Flag mode set to one-shot
 
-  // initialize simulation inputs
+  // initialize simulation input 
   top->clk = 1;
-  top->rst = 0;
-  top->en = 0;
-  top->N = vbdValue();
-  
-  // run simulation for MAX_SIM_CYC clock cycles
+  top->rst = 1;
+  top->en = vbdFlag();
+  top->data_out = 0;
+
   for (simcyc=0; simcyc<MAX_SIM_CYC; simcyc++) {
     // dump variables into VCD file and toggle clock
     for (tick=0; tick<2; tick++) {
@@ -39,23 +36,18 @@ int main(int argc, char **argv, char **env) {
       top->eval ();
     }
 
-    // Display toggle neopixel
-    if (top->tick) {
-      vbdBar(lights);
-      lights = lights ^ 0xFF;
-    }
-    // set up input signals of testbench
-    top->rst = (simcyc < 2);    // assert reset for 1st cycle
-    top->en = (simcyc > 2);
-    top->N = vbdValue();
-    vbdCycle(simcyc);
+    top->rst = 0; // Added line to to set to 0 to start counter
+    top->en = vbdFlag();
+    vbdHex(1, top->data_out & 0xF);
+    vbdBar(top->data_out & 0xFF); // mask data_out with 0xFF
+    
+    vbdCycle(simcyc+1); // Displays cycle number in display
 
-    if (Verilated::gotFinish())  exit(0);
+    if ((Verilated::gotFinish()) || (vbdGetkey()=='q')) 
+      exit(0);
   }
 
   vbdClose();     // ++++
   tfp->close(); 
   exit(0);
 }
-
-//N=49 on my computer
